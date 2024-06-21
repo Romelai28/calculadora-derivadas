@@ -20,6 +20,11 @@ negativo :: (Floating a, Eq a) => Funcion a -> Funcion a
 negativo = Prod (Cte (-1))
 
 
+factorial :: Integer -> Integer
+factorial 0 = 1
+factorial n = n*factorial (n-1)
+
+
 foldFunc :: b -> (a -> b) -> (b -> b -> b) -> (b -> b -> b) -> (b -> b -> b) -> (b -> b) -> (a -> b -> b) -> (b -> b)-> (a -> b-> b) -> (b -> a -> b) -> (b -> b) -> (b -> b) -> (b -> b) -> Funcion a -> b
 foldFunc cX cCte cSuma cProd cFrac cLogNat cLogBase cExp_e cPotencia_base_fija cPotencia cSin cCos cTan func = case func of
     X -> cX
@@ -72,6 +77,19 @@ derivar func = case func of
 n_derivar :: (Floating a, Eq a) => Integer -> Funcion a -> Funcion a
 n_derivar 0 f = f
 n_derivar n f = n_derivar (n-1) (simplificar (derivar f))
+
+
+taylor :: (Floating a, Eq a) => a -> Integer -> Funcion a -> Funcion a
+taylor a n f = taylorAux a 0 n f (Cte 0)
+
+taylorAux :: (Floating a, Eq a) => a -> Integer -> Integer -> Funcion a -> Funcion a -> Funcion a
+taylorAux a iterador n f poli
+    | iterador > n = poli
+    | otherwise = taylorAux a (iterador+1) n (derivar f)
+                    (simplificar (Suma poli
+                                    (Prod (Frac (Cte (evaluar a f)) (Cte (fromIntegral(factorial iterador)))) (Potencia (Suma X (negativo (Cte a))) (fromIntegral iterador)))
+                                 )
+                    )
 
 
 -- Un par de podas para simplificar las expresiones
@@ -169,7 +187,7 @@ simplificar func = case func of
             else simplificar (Potencia_base_fija b f_simp)
 
     Potencia f 1 -> simplificar f
-    Potencia _ 0 -> Cte 0
+    Potencia _ 0 -> Cte 1  -- Considero 0^0 es 1
     Potencia (Potencia f n) m -> simplificar (Potencia f (n*m))
     Potencia f n ->
         let f_simp = simplificar f
