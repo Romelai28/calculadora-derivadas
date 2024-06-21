@@ -85,3 +85,21 @@ formato func = case func of
 
 -- Pendiente: simplificar.
 -- simplificar :: (Floating a, Eq a) => Funcion a -> Funcion a
+
+
+-- Ver de eliminar una de las \.
+toLatex :: (Show a) => Funcion a -> String
+toLatex func = case func of
+    X -> "{x}"
+    Cte k -> show k
+    Suma f g -> "(" ++ toLatex f ++ "+" ++ toLatex g ++ ")"
+    Prod f g -> "(" ++ toLatex f ++ "\\cdot" ++ toLatex g ++ ")"
+    Frac f g -> "\\frac{" ++ toLatex f ++ "}{" ++ toLatex g ++ "}"
+    LogNat f -> "\\ln{(" ++ toLatex f ++ ")}"
+    LogBase b f -> "\\log_" ++ show b ++ "{(" ++ toLatex f ++ ")}"
+    Exp_e f -> "e^{" ++ toLatex f ++ "}"
+    Potencia_base_fija b f -> show b ++ "^{" ++ toLatex f ++ "}"
+    Potencia f n -> toLatex f ++ "^{" ++ show n ++ "}"  -- ¿Hace falta agregar parentesis a la f?
+    Sin f -> "\\sin{(" ++ toLatex f ++ ")}"
+    Cos f -> "\\cos{(" ++ toLatex f ++ ")}"
+    Tan f -> "\\tan{(" ++ toLatex f ++ ")}"
