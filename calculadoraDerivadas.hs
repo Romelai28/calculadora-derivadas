@@ -42,6 +42,10 @@ evaluar :: (Floating a, Eq a) => a -> Funcion a -> a
 evaluar arg = foldFunc arg id (+) (*) (/) (log) (logBase) (exp) (**) (**) (sin) (cos) (tan)
 
 
+esConstante :: Funcion a -> Bool
+esConstante (Cte _) = True
+esConstante _       = False
+
 -- Se pued escribir como un fold pero no era claro.
 derivar :: (Floating a, Eq a) => Funcion a -> Funcion a
 derivar func = case func of
@@ -50,7 +54,7 @@ derivar func = case func of
     Suma f g     -> Suma (derivar f) (derivar g)
     Prod f g     -> Suma (Prod f (derivar g)) (Prod (derivar f) g)
     Frac f g     -> Frac (Suma (Prod (derivar f) g) (negativo(Prod f (derivar g))))
-                         (Prod g g)
+                         (Potencia g 2)
 
     LogNat f     -> Frac (derivar f) (f)
     LogBase b f  -> Frac (derivar f)
@@ -71,13 +75,20 @@ n_derivar n f = n_derivar (n-1) (simplificar (derivar f))
 
 
 -- Un par de podas para simplificar las expresiones
+-- Las cte's son izquiedistas.
 simplificar :: (Floating a, Eq a) => Funcion a -> Funcion a
 simplificar func = case func of
     X -> X
     Cte k -> Cte k
 
-    Suma (Cte 0) f -> simplificar f
-    Suma f (Cte 0) -> simplificar f
+
+    Suma (Cte 0) f -> simplificar f     -- 0 neutro de la suma.
+    Suma (Cte a) (Cte b) -> Cte (a+b)   -- Suma entre cte's.
+
+    Suma f (Cte a) | not (esConstante f) -> simplificar (Suma (Cte a) f)                    -- localmente mando las cte a la izquierda.
+    Suma f (Suma (Cte a) g) | not (esConstante f) -> simplificar (Suma (Cte a) (Suma f g))  -- doy un paso hacia afuera, mando las cte afuera a la izquierda.
+    Suma (Cte a) (Suma (Cte b) f) -> Suma (Cte (a+b)) (simplificar f)                       -- Si tengo 2 cte a la izquierda, las opero entre sí.
+
     Suma f g ->
         let f_simp = simplificar f
             g_simp = simplificar g
@@ -85,10 +96,17 @@ simplificar func = case func of
             then Suma f g
             else simplificar (Suma f_simp g_simp)
     
-    Prod (Cte 0) f -> Cte 0
-    Prod f (Cte 0) -> Cte 0
-    Prod (Cte 1) f -> simplificar f
-    Prod f (Cte 1) -> simplificar f
+    Prod (Cte 0) f -> Cte 0             -- 0 absorbente del producto.
+    Prod (Cte 1) f -> simplificar f     -- 1 neutro del producto
+    Prod (Cte a) (Cte b) -> Cte (a*b)   -- Producto entre cte's.
+
+    Prod f (Cte a) | not (esConstante f) -> simplificar (Prod (Cte a) f)                    -- localmente mando las cte a la izquierda.
+    Prod f (Prod (Cte a) g) | not (esConstante f) -> simplificar (Prod (Cte a) (Prod f g))  -- doy un paso hacia afuera, mando las cte afuera a la izquierda.
+    Prod (Cte a) (Prod (Cte b) f) -> Prod (Cte (a*b)) (simplificar f)                       -- Si tengo 2 cte a la izquierda, las opero entre sí.
+
+    Prod (Potencia f n) (Potencia g m) | f == g -> simplificar (Potencia f (n+m))          -- Propiedad: Producto de potencias de misma base.
+    Prod (Potencia_base_fija a f) (Potencia_base_fija b g) | a == b -> simplificar (Potencia_base_fija a (Prod f g))  -- Propiedad: Producto de potencias de misma base.
+    
     Prod f g ->
         let f_simp = simplificar f
             g_simp = simplificar g
@@ -96,7 +114,7 @@ simplificar func = case func of
             then Prod f g
             else simplificar (Prod f_simp g_simp)
 
-    -- Frac f f -> Cte 1
+    Frac f g | f == g -> Cte 1
     Frac f (Cte 1) -> simplificar f
     Frac f g ->
         let f_simp = simplificar f
@@ -114,7 +132,7 @@ simplificar func = case func of
             else simplificar (LogNat f_simp)
 
     LogBase _ (Cte 1) -> Cte 0
-    --LogBase b (Cte b) -> Cte 1
+    LogBase a (Cte b) | a == b -> Cte 1
     LogBase b f ->
         let f_simp = simplificar f
         in if f == f_simp
@@ -138,6 +156,7 @@ simplificar func = case func of
 
     Potencia f 1 -> simplificar f
     Potencia _ 0 -> Cte 0
+    Potencia (Potencia f n) m -> simplificar (Potencia f (n*m))
     Potencia f n ->
         let f_simp = simplificar f
         in if f == f_simp
@@ -191,12 +210,13 @@ toLatex func = case func of
     Frac f g -> "\\frac{" ++ toLatex f ++ "}{" ++ toLatex g ++ "}"
     LogNat f -> "\\ln{(" ++ toLatex f ++ ")}"
     LogBase b f -> "\\log_" ++ show b ++ "{(" ++ toLatex f ++ ")}"
-    Exp_e f -> "e^{" ++ toLatex f ++ "}"
-    Potencia_base_fija b f -> show b ++ "^{" ++ toLatex f ++ "}"
-    Potencia f n -> toLatex f ++ "^{" ++ show n ++ "}"  -- ¿Hace falta agregar parentesis a la f?
+    Exp_e f -> "{e}^{" ++ toLatex f ++ "}"
+    Potencia_base_fija b f -> "{" ++ show b ++ "}^{" ++ toLatex f ++ "}"
+    Potencia f n -> "{" ++ toLatex f ++ "}^{" ++ show n ++ "}"  -- ¿Hace falta agregar parentesis a la f?
     Sin f -> "\\sin{(" ++ toLatex f ++ ")}"
     Cos f -> "\\cos{(" ++ toLatex f ++ ")}"
     Tan f -> "\\tan{(" ++ toLatex f ++ ")}"
 
--- Pendiente agregar tipado
+
+-- Pendiente agregar tipado de la función latex
 latex = putStrLn . toLatex . simplificar
