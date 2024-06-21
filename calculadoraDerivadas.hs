@@ -76,7 +76,7 @@ derivar func = case func of
 
 n_derivar :: (Floating a, Eq a) => Integer -> Funcion a -> Funcion a
 n_derivar 0 f = f
-n_derivar n f = n_derivar (n-1) (simplificar (derivar f))
+n_derivar n f = n_derivar (n-1) (simplificar . derivar $ f)
 
 
 taylor :: (Floating a, Eq a) => a -> Integer -> Funcion a -> Funcion a
@@ -85,7 +85,7 @@ taylor a n f = taylorAux a 0 n f (Cte 0)
 taylorAux :: (Floating a, Eq a) => a -> Integer -> Integer -> Funcion a -> Funcion a -> Funcion a
 taylorAux a iterador n f poli
     | iterador > n = poli
-    | otherwise = taylorAux a (iterador+1) n (derivar f)
+    | otherwise = taylorAux a (iterador+1) n (simplificar . derivar $ f)
                     (simplificar (Suma poli
                                     (Prod (Frac (Cte (evaluar a f)) (Cte (fromIntegral(factorial iterador)))) (Potencia (Suma X (negativo (Cte a))) (fromIntegral iterador)))
                                  )
