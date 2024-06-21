@@ -67,7 +67,7 @@ derivar func = case func of
 
 n_derivar :: (Floating a, Eq a) => Integer -> Funcion a -> Funcion a
 n_derivar 0 f = f
-n_derivar n f = n_derivar (n-1) (derivar f)
+n_derivar n f = n_derivar (n-1) (simplificar (derivar f))
 
 
 -- Devuelve una string de la función más amigable de leer. (Genera parentesis redundates)
@@ -106,21 +106,21 @@ simplificar func = case func of
     Prod (Cte 0) f -> Cte 0
     Prod f (Cte 0) -> Cte 0
     Prod (Cte 1) f -> simplificar f
-    Prod f (Cte 1) f -> simplificar f
+    Prod f (Cte 1) -> simplificar f
     Prod f g ->
         let f_simp = simplificar f
             g_simp = simplificar g
         in if f == f_simp && g == g_simp
-            then Suma f g
+            then Prod f g
             else simplificar (Prod f_simp g_simp)  -- Necesita el simplificar de verdad aca?
 
-    Frac f f -> Cte 1
+    --Frac f f -> Cte 1
     Frac f (Cte 1) -> simplificar f
     Frac f g ->
         let f_simp = simplificar f
             g_simp = simplificar g
         in if f == f_simp && g == g_simp
-            then Suma f g
+            then Frac f g
             else simplificar (Frac f_simp g_simp)  -- Necesita el simplificar de verdad aca?
 
     LogNat (Cte 1) -> Cte 0
@@ -131,40 +131,56 @@ simplificar func = case func of
             then LogNat f
             else simplificar (LogNat f_simp)  -- Necesita el simplificar de verdad aca?
 
-    LogBase _ 1 -> Cte 0
-    LogBase b b -> Cte 1
+    --LogBase _ 1 -> Cte 0
+    --LogBase b (Cte b) -> Cte 1
     LogBase b f ->
         let f_simp = simplificar f
         in if f == f_simp
             then LogBase b f
             else simplificar (LogBase b f_simp)  -- Necesita el simplificar de verdad aca?
     
-    Exp_e (Cte 1) -> Cte 0
-    Exp_e f =
+    Exp_e (Cte 0) -> Cte 1
+    Exp_e f ->
         let f_simp = simplificar f
         in if f == f_simp
             then Exp_e f
             else simplificar (Exp_e f_simp)  -- Necesita el simplificar de verdad aca?
 
+    Potencia_base_fija _ (Cte 0) -> Cte 1  -- Considero 0^0 es 1
+    Potencia_base_fija b (Cte 1) -> Cte b
+    Potencia_base_fija b f ->
+        let f_simp = simplificar f
+        in if f == f_simp
+            then Potencia_base_fija b f
+            else simplificar (Potencia_base_fija b f_simp)  -- Necesita el simplificar de verdad aca?
+
+    Potencia f 1 -> simplificar f
+    Potencia _ 0 -> Cte 0
+    Potencia f n ->
+        let f_simp = simplificar f
+        in if f == f_simp
+            then Potencia f n
+            else simplificar (Potencia f_simp n)  -- Necesita el simplificar de verdad aca?
     
+    Sin f ->
+        let f_simp = simplificar f
+        in if f == f_simp
+            then Sin f
+            else simplificar (Sin f_simp)  -- Necesita el simplificar de verdad aca?
+
+    Cos f ->
+        let f_simp = simplificar f
+        in if f == f_simp
+            then Cos f
+            else simplificar (Cos f_simp)  -- Necesita el simplificar de verdad aca?
+
+    Tan f ->
+        let f_simp = simplificar f
+        in if f == f_simp
+            then Tan f
+            else simplificar (Tan f_simp)  -- Necesita el simplificar de verdad aca?
 
 
-
-
-
-
-
-
-
-
-
-
-
-    
-
-simplificar (Prod _ (Cte 0)) = Cte 0
-simplificar (Prod (Cte 0) _) = Cte 0
-simplificar f = f
 
 -- Ver de eliminar una de las \.
 toLatex :: (Show a) => Funcion a -> String
