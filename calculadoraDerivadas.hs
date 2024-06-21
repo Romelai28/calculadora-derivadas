@@ -65,6 +65,11 @@ derivar func = case func of
     Tan f        -> Prod (Suma (Cte 1) (Prod (Tan f) (Tan f))) (derivar f)
 
 
+n_derivar :: (Floating a, Eq a) => Integer -> Funcion a -> Funcion a
+n_derivar 0 f = f
+n_derivar n f = n_derivar (n-1) (derivar f)
+
+
 -- Devuelve una string de la función más amigable de leer. (Genera parentesis redundates)
 formato :: (Show a) => Funcion a -> String
 formato func = case func of
@@ -84,8 +89,66 @@ formato func = case func of
 
 
 -- Pendiente: simplificar.
--- simplificar :: (Floating a, Eq a) => Funcion a -> Funcion a
+simplificar :: (Floating a, Eq a) => Funcion a -> Funcion a
+simplificar func = case func of
+    X -> X
+    Cte k -> Cte k
 
+    Suma (Cte 0) f -> simplificar f
+    Suma f (Cte 0) -> simplificar f
+    Suma f g ->
+        let f_simp = simplificar f
+            g_simp = simplificar g
+        in if f == f_simp && g == g_simp
+            then Suma f g
+            else simplificar (Suma f_simp g_simp)  -- Necesita el simplificar de verdad aca?
+    
+    Prod (Cte 0) f -> Cte 0
+    Prod f (Cte 0) -> Cte 0
+    Prod (Cte 1) f -> simplificar f
+    Prod f (Cte 1) f -> simplificar f
+    Prod f g ->
+        let f_simp = simplificar f
+            g_simp = simplificar g
+        in if f == f_simp && g == g_simp
+            then Suma f g
+            else simplificar (Prod f_simp g_simp)  -- Necesita el simplificar de verdad aca?
+
+    Frac f f -> Cte 1
+    Frac f (Cte 1) -> simplificar f
+    Frac f g ->
+        let f_simp = simplificar f
+            g_simp = simplificar g
+        in if f == f_simp && g == g_simp
+            then Suma f g
+            else simplificar (Frac f_simp g_simp)  -- Necesita el simplificar de verdad aca?
+
+    LogNat (Cte 1) -> Cte 0
+    LogNat (Exp_e (Cte 1)) -> Cte 1
+    LogNat f ->
+        let f_simp = simplificar f
+        in if f == f_simp
+            then LogNat f
+            else simplificar (LogNat f_simp)  -- Necesita el simplificar de verdad aca?
+
+    LogBase _ 1 -> Cte 0
+    LogBase b b -> Cte 1
+    LogBase b f ->
+        let f_simp = simplificar f
+        in if f == f_simp
+            then LogBase b f
+            else simplificar (LogBase b f_simp)  -- Necesita el simplificar de verdad aca?
+    
+    Exp_e (Cte 1) -> Cte 0
+    Exp_e f =
+        let f_simp = simplificar f
+        in if f == f_simp
+            then Exp_e f
+            else simplificar (Exp_e f_simp)  -- Necesita el simplificar de verdad aca?
+
+simplificar (Prod _ (Cte 0)) = Cte 0
+simplificar (Prod (Cte 0) _) = Cte 0
+simplificar f = f
 
 -- Ver de eliminar una de las \.
 toLatex :: (Show a) => Funcion a -> String
