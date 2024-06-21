@@ -81,13 +81,17 @@ simplificar func = case func of
     X -> X
     Cte k -> Cte k
 
-
     Suma (Cte 0) f -> simplificar f     -- 0 neutro de la suma.
     Suma (Cte a) (Cte b) -> Cte (a+b)   -- Suma entre cte's.
 
     Suma f (Cte a) | not (esConstante f) -> simplificar (Suma (Cte a) f)                    -- localmente mando las cte a la izquierda.
     Suma f (Suma (Cte a) g) | not (esConstante f) -> simplificar (Suma (Cte a) (Suma f g))  -- doy un paso hacia afuera, mando las cte afuera a la izquierda.
     Suma (Cte a) (Suma (Cte b) f) -> Suma (Cte (a+b)) (simplificar f)                       -- Si tengo 2 cte a la izquierda, las opero entre sí.
+
+    -- unificar sumas a productos (Problema, según su ubicación dentro del producto no unifican necesariamente)
+    Suma f g | f == g -> simplificar (Prod (Cte 2) f)
+    Suma f (Prod (Cte a) g) | f == g -> simplificar (Prod (Cte (a+1)) f)
+    Suma (Prod (Cte a) f) g | f == g -> simplificar (Prod (Cte (a+1)) f)
 
     Suma f g ->
         let f_simp = simplificar f
@@ -104,8 +108,14 @@ simplificar func = case func of
     Prod f (Prod (Cte a) g) | not (esConstante f) -> simplificar (Prod (Cte a) (Prod f g))  -- doy un paso hacia afuera, mando las cte afuera a la izquierda.
     Prod (Cte a) (Prod (Cte b) f) -> Prod (Cte (a*b)) (simplificar f)                       -- Si tengo 2 cte a la izquierda, las opero entre sí.
 
+    -- unificar productos a potencias (Problema, según su ubicación dentro del producto no unifican necesariamente)
+    Prod f g | f == g -> simplificar (Potencia f 2)                   -- temporal?
+    Prod f (Potencia g n) | f == g -> simplificar (Potencia f (n+1))  -- temporal?
+    Prod (Potencia f n) g | f == g -> simplificar (Potencia f (n+1))  -- temporal?
+
     Prod (Potencia f n) (Potencia g m) | f == g -> simplificar (Potencia f (n+m))          -- Propiedad: Producto de potencias de misma base.
     Prod (Potencia_base_fija a f) (Potencia_base_fija b g) | a == b -> simplificar (Potencia_base_fija a (Prod f g))  -- Propiedad: Producto de potencias de misma base.
+
     
     Prod f g ->
         let f_simp = simplificar f
@@ -116,6 +126,10 @@ simplificar func = case func of
 
     Frac f g | f == g -> Cte 1
     Frac f (Cte 1) -> simplificar f
+    Frac (Cte 0) _ -> Cte 0  -- Si habilito experimental, esto es reduntante
+    -- Experimental:  (No usar fracciones)
+    Frac f g -> simplificar (Prod f (Potencia g (-1)))
+    -- Si se habilita experimental, esto de abajo es reduntante.
     Frac f g ->
         let f_simp = simplificar f
             g_simp = simplificar g
@@ -183,40 +197,46 @@ simplificar func = case func of
 
 
 -- Devuelve una string de la función más amigable de leer. (Genera parentesis redundates)
-formato :: (Show a) => Funcion a -> String
-formato func = case func of
+formatoNoSimp :: (Floating a, Eq a, Show a) => Funcion a -> String
+formatoNoSimp func = case func of
     X -> "X"
     Cte k -> show k
-    Suma f g -> "(" ++ formato f ++ "+" ++ formato g ++ ")"
-    Prod f g -> "(" ++ formato f ++ "*" ++ formato g ++ ")"
-    Frac f g -> "(" ++ formato f ++ "/" ++ formato g ++ ")"
-    LogNat f -> "ln(" ++ formato f ++ ")"
-    LogBase b f -> "log_" ++ show b ++ "_(" ++ formato f ++ ")"
-    Exp_e f -> "e^{" ++ formato f ++ "}"
-    Potencia_base_fija b f -> show b ++ "^{" ++ formato f ++ "}"
-    Potencia f n -> formato f ++ "^{" ++ show n ++ "}"  -- ¿Hace falta agregar parentesis a la f?
-    Sin f -> "sin(" ++ formato f ++ ")"
-    Cos f -> "cos(" ++ formato f ++ ")"
-    Tan f -> "tan(" ++ formato f ++ ")"
+    Suma f g -> "(" ++ formatoNoSimp f ++ "+" ++ formatoNoSimp g ++ ")"
+    Prod (Cte (-1)) f -> "(-" ++ formatoNoSimp f ++ ")"
+    Prod f g -> "(" ++ formatoNoSimp f ++ "*" ++ formatoNoSimp g ++ ")"
+    Frac f g -> "(" ++ formatoNoSimp f ++ "/" ++ formatoNoSimp g ++ ")"
+    LogNat f -> "ln(" ++ formatoNoSimp f ++ ")"
+    LogBase b f -> "log_" ++ show b ++ "_(" ++ formatoNoSimp f ++ ")"
+    Exp_e f -> "e^{" ++ formatoNoSimp f ++ "}"
+    Potencia_base_fija b f -> show b ++ "^{" ++ formatoNoSimp f ++ "}"
+    Potencia f n -> formatoNoSimp f ++ "^{" ++ show n ++ "}"  -- ¿Hace falta agregar parentesis a la f?
+    Sin f -> "sin(" ++ formatoNoSimp f ++ ")"
+    Cos f -> "cos(" ++ formatoNoSimp f ++ ")"
+    Tan f -> "tan(" ++ formatoNoSimp f ++ ")"
 
 
--- La solución para eliminar las \ fue usando putStrLn, me quedo una función auxiliar (toLatex) y otra principal (latex)
-toLatex :: (Show a) => Funcion a -> String
-toLatex func = case func of
+formato :: (Floating a, Eq a, Show a) => Funcion a -> String
+formato = formatoNoSimp . simplificar
+
+
+-- La solución para eliminar las \ fue usando putStrLn, me quedo una función auxiliar (toLatexNoSimp) y otra principal (toLatex)
+toLatexNoSimp :: (Floating a, Eq a, Show a) => Funcion a -> String
+toLatexNoSimp func = case func of
     X -> "{x}"
     Cte k -> show k
-    Suma f g -> "(" ++ toLatex f ++ " + " ++ toLatex g ++ ")"
-    Prod f g -> "(" ++ toLatex f ++ " \\cdot " ++ toLatex g ++ ")"
-    Frac f g -> "\\frac{" ++ toLatex f ++ "}{" ++ toLatex g ++ "}"
-    LogNat f -> "\\ln{(" ++ toLatex f ++ ")}"
-    LogBase b f -> "\\log_" ++ show b ++ "{(" ++ toLatex f ++ ")}"
-    Exp_e f -> "{e}^{" ++ toLatex f ++ "}"
-    Potencia_base_fija b f -> "{" ++ show b ++ "}^{" ++ toLatex f ++ "}"
-    Potencia f n -> "{" ++ toLatex f ++ "}^{" ++ show n ++ "}"  -- ¿Hace falta agregar parentesis a la f?
-    Sin f -> "\\sin{(" ++ toLatex f ++ ")}"
-    Cos f -> "\\cos{(" ++ toLatex f ++ ")}"
-    Tan f -> "\\tan{(" ++ toLatex f ++ ")}"
+    Suma f g -> "(" ++ toLatexNoSimp f ++ " + " ++ toLatexNoSimp g ++ ")"
+    Prod (Cte (-1)) f -> "(-" ++ toLatexNoSimp f ++ ")"
+    Prod f g -> "(" ++ toLatexNoSimp f ++ " \\cdot " ++ toLatexNoSimp g ++ ")"
+    Frac f g -> "\\frac{" ++ toLatexNoSimp f ++ "}{" ++ toLatexNoSimp g ++ "}"
+    LogNat f -> "\\ln{(" ++ toLatexNoSimp f ++ ")}"
+    LogBase b f -> "\\log_" ++ show b ++ "{(" ++ toLatexNoSimp f ++ ")}"
+    Exp_e f -> "{e}^{" ++ toLatexNoSimp f ++ "}"
+    Potencia_base_fija b f -> "{" ++ show b ++ "}^{" ++ toLatexNoSimp f ++ "}"
+    Potencia f n -> "{" ++ toLatexNoSimp f ++ "}^{" ++ show n ++ "}"  -- ¿Hace falta agregar parentesis a la f?
+    Sin f -> "\\sin{(" ++ toLatexNoSimp f ++ ")}"
+    Cos f -> "\\cos{(" ++ toLatexNoSimp f ++ ")}"
+    Tan f -> "\\tan{(" ++ toLatexNoSimp f ++ ")}"
 
 
 -- Pendiente agregar tipado de la función latex
-latex = putStrLn . toLatex . simplificar
+toLatex = putStrLn . toLatexNoSimp . simplificar
