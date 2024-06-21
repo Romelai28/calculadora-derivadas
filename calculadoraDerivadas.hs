@@ -16,6 +16,10 @@ data Funcion a = X
                 deriving (Eq,Show,Read)
 
 
+negativo :: (Floating a, Eq a) => Funcion a -> Funcion a
+negativo = Prod (Cte (-1))
+
+
 foldFunc :: b -> (a -> b) -> (b -> b -> b) -> (b -> b -> b) -> (b -> b -> b) -> (b -> b) -> (a -> b -> b) -> (b -> b)-> (a -> b-> b) -> (b -> a -> b) -> (b -> b) -> (b -> b) -> (b -> b) -> Funcion a -> b
 foldFunc cX cCte cSuma cProd cFrac cLogNat cLogBase cExp_e cPotencia_base_fija cPotencia cSin cCos cTan func = case func of
     X -> cX
@@ -38,10 +42,6 @@ evaluar :: (Floating a, Eq a) => a -> Funcion a -> a
 evaluar arg = foldFunc arg id (+) (*) (/) (log) (logBase) (exp) (**) (**) (sin) (cos) (tan)
 
 
-negativo :: (Floating a, Eq a) => Funcion a -> Funcion a
-negativo = Prod (Cte (-1))
-
-
 -- Se pued escribir como un fold pero no era claro.
 derivar :: (Floating a, Eq a) => Funcion a -> Funcion a
 derivar func = case func of
@@ -50,14 +50,14 @@ derivar func = case func of
     Suma f g     -> Suma (derivar f) (derivar g)
     Prod f g     -> Suma (Prod f (derivar g)) (Prod (derivar f) g)
     Frac f g     -> Frac (Suma (Prod (derivar f) g) (negativo(Prod f (derivar g))))
-                        (Prod g g)
+                         (Prod g g)
+
     LogNat f     -> Frac (derivar f) (f)
     LogBase b f  -> Frac (derivar f)
-                        (Prod f (LogNat (Cte b)))
+                         (Prod f (LogNat (Cte b)))
+
     Exp_e f      -> Prod (Exp_e f) (derivar f)
-
     Potencia_base_fija b f -> Prod (Prod (Potencia_base_fija b f) (LogNat (Cte b))) (derivar f)
-
     Potencia f n -> Prod (Prod (Cte n) (Potencia f (evaluar 727 (Suma (Cte n) (negativo (Cte 1)))))) (derivar f)
 
     Sin f        -> Prod (Cos f) (derivar f)
@@ -68,6 +68,99 @@ derivar func = case func of
 n_derivar :: (Floating a, Eq a) => Integer -> Funcion a -> Funcion a
 n_derivar 0 f = f
 n_derivar n f = n_derivar (n-1) (simplificar (derivar f))
+
+
+-- Un par de podas para simplificar las expresiones
+simplificar :: (Floating a, Eq a) => Funcion a -> Funcion a
+simplificar func = case func of
+    X -> X
+    Cte k -> Cte k
+
+    Suma (Cte 0) f -> simplificar f
+    Suma f (Cte 0) -> simplificar f
+    Suma f g ->
+        let f_simp = simplificar f
+            g_simp = simplificar g
+        in if f == f_simp && g == g_simp
+            then Suma f g
+            else simplificar (Suma f_simp g_simp)
+    
+    Prod (Cte 0) f -> Cte 0
+    Prod f (Cte 0) -> Cte 0
+    Prod (Cte 1) f -> simplificar f
+    Prod f (Cte 1) -> simplificar f
+    Prod f g ->
+        let f_simp = simplificar f
+            g_simp = simplificar g
+        in if f == f_simp && g == g_simp
+            then Prod f g
+            else simplificar (Prod f_simp g_simp)
+
+    -- Frac f f -> Cte 1
+    Frac f (Cte 1) -> simplificar f
+    Frac f g ->
+        let f_simp = simplificar f
+            g_simp = simplificar g
+        in if f == f_simp && g == g_simp
+            then Frac f g
+            else simplificar (Frac f_simp g_simp)
+
+    LogNat (Cte 1) -> Cte 0
+    LogNat (Exp_e (Cte 1)) -> Cte 1
+    LogNat f ->
+        let f_simp = simplificar f
+        in if f == f_simp
+            then LogNat f
+            else simplificar (LogNat f_simp)
+
+    LogBase _ (Cte 1) -> Cte 0
+    --LogBase b (Cte b) -> Cte 1
+    LogBase b f ->
+        let f_simp = simplificar f
+        in if f == f_simp
+            then LogBase b f
+            else simplificar (LogBase b f_simp)
+    
+    Exp_e (Cte 0) -> Cte 1
+    Exp_e f ->
+        let f_simp = simplificar f
+        in if f == f_simp
+            then Exp_e f
+            else simplificar (Exp_e f_simp)
+
+    Potencia_base_fija _ (Cte 0) -> Cte 1  -- Considero 0^0 es 1
+    Potencia_base_fija b (Cte 1) -> Cte b
+    Potencia_base_fija b f ->
+        let f_simp = simplificar f
+        in if f == f_simp
+            then Potencia_base_fija b f
+            else simplificar (Potencia_base_fija b f_simp)
+
+    Potencia f 1 -> simplificar f
+    Potencia _ 0 -> Cte 0
+    Potencia f n ->
+        let f_simp = simplificar f
+        in if f == f_simp
+            then Potencia f n
+            else simplificar (Potencia f_simp n)
+    
+    Sin f ->
+        let f_simp = simplificar f
+        in if f == f_simp
+            then Sin f
+            else simplificar (Sin f_simp)
+
+    Cos f ->
+        let f_simp = simplificar f
+        in if f == f_simp
+            then Cos f
+            else simplificar (Cos f_simp)
+
+    Tan f ->
+        let f_simp = simplificar f
+        in if f == f_simp
+            then Tan f
+            else simplificar (Tan f_simp)
 
 
 -- Devuelve una string de la función más amigable de leer. (Genera parentesis redundates)
@@ -88,107 +181,13 @@ formato func = case func of
     Tan f -> "tan(" ++ formato f ++ ")"
 
 
--- Pendiente: simplificar.
-simplificar :: (Floating a, Eq a) => Funcion a -> Funcion a
-simplificar func = case func of
-    X -> X
-    Cte k -> Cte k
-
-    Suma (Cte 0) f -> simplificar f
-    Suma f (Cte 0) -> simplificar f
-    Suma f g ->
-        let f_simp = simplificar f
-            g_simp = simplificar g
-        in if f == f_simp && g == g_simp
-            then Suma f g
-            else simplificar (Suma f_simp g_simp)  -- Necesita el simplificar de verdad aca?
-    
-    Prod (Cte 0) f -> Cte 0
-    Prod f (Cte 0) -> Cte 0
-    Prod (Cte 1) f -> simplificar f
-    Prod f (Cte 1) -> simplificar f
-    Prod f g ->
-        let f_simp = simplificar f
-            g_simp = simplificar g
-        in if f == f_simp && g == g_simp
-            then Prod f g
-            else simplificar (Prod f_simp g_simp)  -- Necesita el simplificar de verdad aca?
-
-    --Frac f f -> Cte 1
-    Frac f (Cte 1) -> simplificar f
-    Frac f g ->
-        let f_simp = simplificar f
-            g_simp = simplificar g
-        in if f == f_simp && g == g_simp
-            then Frac f g
-            else simplificar (Frac f_simp g_simp)  -- Necesita el simplificar de verdad aca?
-
-    LogNat (Cte 1) -> Cte 0
-    LogNat (Exp_e (Cte 1)) -> Cte 1
-    LogNat f ->
-        let f_simp = simplificar f
-        in if f == f_simp
-            then LogNat f
-            else simplificar (LogNat f_simp)  -- Necesita el simplificar de verdad aca?
-
-    --LogBase _ 1 -> Cte 0
-    --LogBase b (Cte b) -> Cte 1
-    LogBase b f ->
-        let f_simp = simplificar f
-        in if f == f_simp
-            then LogBase b f
-            else simplificar (LogBase b f_simp)  -- Necesita el simplificar de verdad aca?
-    
-    Exp_e (Cte 0) -> Cte 1
-    Exp_e f ->
-        let f_simp = simplificar f
-        in if f == f_simp
-            then Exp_e f
-            else simplificar (Exp_e f_simp)  -- Necesita el simplificar de verdad aca?
-
-    Potencia_base_fija _ (Cte 0) -> Cte 1  -- Considero 0^0 es 1
-    Potencia_base_fija b (Cte 1) -> Cte b
-    Potencia_base_fija b f ->
-        let f_simp = simplificar f
-        in if f == f_simp
-            then Potencia_base_fija b f
-            else simplificar (Potencia_base_fija b f_simp)  -- Necesita el simplificar de verdad aca?
-
-    Potencia f 1 -> simplificar f
-    Potencia _ 0 -> Cte 0
-    Potencia f n ->
-        let f_simp = simplificar f
-        in if f == f_simp
-            then Potencia f n
-            else simplificar (Potencia f_simp n)  -- Necesita el simplificar de verdad aca?
-    
-    Sin f ->
-        let f_simp = simplificar f
-        in if f == f_simp
-            then Sin f
-            else simplificar (Sin f_simp)  -- Necesita el simplificar de verdad aca?
-
-    Cos f ->
-        let f_simp = simplificar f
-        in if f == f_simp
-            then Cos f
-            else simplificar (Cos f_simp)  -- Necesita el simplificar de verdad aca?
-
-    Tan f ->
-        let f_simp = simplificar f
-        in if f == f_simp
-            then Tan f
-            else simplificar (Tan f_simp)  -- Necesita el simplificar de verdad aca?
-
-
-
--- Ver de eliminar una de las \.
+-- La solución para eliminar las \ fue usando putStrLn, me quedo una función auxiliar (toLatex) y otra principal (latex)
 toLatex :: (Show a) => Funcion a -> String
 toLatex func = case func of
     X -> "{x}"
     Cte k -> show k
-    Suma f g -> "(" ++ toLatex f ++ "+" ++ toLatex g ++ ")"
-    Prod f g -> "(" ++ toLatex f ++ "\\cdot" ++ toLatex g ++ ")"
+    Suma f g -> "(" ++ toLatex f ++ " + " ++ toLatex g ++ ")"
+    Prod f g -> "(" ++ toLatex f ++ " \\cdot " ++ toLatex g ++ ")"
     Frac f g -> "\\frac{" ++ toLatex f ++ "}{" ++ toLatex g ++ "}"
     LogNat f -> "\\ln{(" ++ toLatex f ++ ")}"
     LogBase b f -> "\\log_" ++ show b ++ "{(" ++ toLatex f ++ ")}"
@@ -198,3 +197,6 @@ toLatex func = case func of
     Sin f -> "\\sin{(" ++ toLatex f ++ ")}"
     Cos f -> "\\cos{(" ++ toLatex f ++ ")}"
     Tan f -> "\\tan{(" ++ toLatex f ++ ")}"
+
+-- Pendiente agregar tipado
+latex = putStrLn . toLatex . simplificar
