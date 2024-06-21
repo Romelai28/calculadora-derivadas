@@ -146,6 +146,22 @@ simplificar func = case func of
             then Exp_e f
             else simplificar (Exp_e f_simp)  -- Necesita el simplificar de verdad aca?
 
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
+
 simplificar (Prod _ (Cte 0)) = Cte 0
 simplificar (Prod (Cte 0) _) = Cte 0
 simplificar f = f
