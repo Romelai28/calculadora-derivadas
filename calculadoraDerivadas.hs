@@ -28,6 +28,9 @@ instance (Fractional a, Num a) => Fractional (MathExp a) where
     (/) = Frac
     fromRational = Cte . fromRational
 
+instance (Floating a, Fractional a, Num a) => Floating (MathExp a) where
+    x ** (Cte n)  = Potencia x n
+    pi = Cte pi
 
 
 factorial :: Integer -> Integer
@@ -68,7 +71,7 @@ derivar func = case func of
     Cte _        -> 0
     Suma f g     -> (derivar f) + (derivar g)
     Prod f g     -> f * (derivar g) + (derivar f) * g
-    Frac f g     -> ((derivar f) * g - f * (derivar g)) / (Potencia g 2)
+    Frac f g     -> ((derivar f) * g - f * (derivar g)) / (g**2)
 
     LogNat f     -> (derivar f) / f
     LogBase b f  -> (derivar f) / (f * (LogNat (Cte b)))
@@ -79,7 +82,7 @@ derivar func = case func of
 
     Sin f        -> (Cos f) * (derivar f)
     Cos f        -> (negate (Sin f)) * (derivar f)
-    Tan f        -> (1 + (Tan f)*(Tan f)) * (derivar f)
+    Tan f        -> (1 + (Tan f)**2) * (derivar f)
 
 
 n_derivar :: (Floating a, Eq a) => Integer -> MathExp a -> MathExp a
@@ -104,7 +107,6 @@ recta_tangente :: (Floating a, Eq a) => a -> MathExp a -> MathExp a
 recta_tangente a f = m * (X - Cte a) + Cte (evaluar a f)
     where m = Cte (evaluar a (derivar f))
 -- ejemplo: formato (recta_tangente 2 (6+X*X+5*X))
-
 
 
 -- Un par de podas para simplificar las expresiones
