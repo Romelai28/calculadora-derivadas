@@ -16,8 +16,18 @@ data MathExp a = X
                 deriving (Eq,Show,Read)
 
 
-negativo :: (Floating a, Eq a) => MathExp a -> MathExp a
-negativo = Prod (Cte (-1))
+instance Num a => Num (MathExp a) where
+    (+) = Suma
+    (*) = Prod
+    negate = Prod (Cte (-1))
+    a - b = a + (negate b)
+    fromInteger = Cte . fromInteger
+
+
+instance (Fractional a, Num a) => Fractional (MathExp a) where
+    (/) = Frac
+    fromRational = Cte . fromRational
+
 
 
 factorial :: Integer -> Integer
@@ -54,24 +64,22 @@ esConstante _       = False
 -- Se pued escribir como un fold pero no era claro.
 derivar :: (Floating a, Eq a) => MathExp a -> MathExp a
 derivar func = case func of
-    X            -> Cte 1
-    Cte _        -> Cte 0
-    Suma f g     -> Suma (derivar f) (derivar g)
-    Prod f g     -> Suma (Prod f (derivar g)) (Prod (derivar f) g)
-    Frac f g     -> Frac (Suma (Prod (derivar f) g) (negativo(Prod f (derivar g))))
-                         (Potencia g 2)
+    X            -> 1
+    Cte _        -> 0
+    Suma f g     -> (derivar f) + (derivar g)
+    Prod f g     -> f * (derivar g) + (derivar f) * g
+    Frac f g     -> ((derivar f) * g - f * (derivar g)) / (Potencia g 2)
 
-    LogNat f     -> Frac (derivar f) (f)
-    LogBase b f  -> Frac (derivar f)
-                         (Prod f (LogNat (Cte b)))
+    LogNat f     -> (derivar f) / f
+    LogBase b f  -> (derivar f) / (f * (LogNat (Cte b)))
 
-    Exp_e f      -> Prod (Exp_e f) (derivar f)
-    Potencia_base_fija b f -> Prod (Prod (Potencia_base_fija b f) (LogNat (Cte b))) (derivar f)
-    Potencia f n -> Prod (Prod (Cte n) (Potencia f (evaluar 727 (Suma (Cte n) (negativo (Cte 1)))))) (derivar f)
+    Exp_e f      -> (Exp_e f) * (derivar f)
+    Potencia_base_fija b f -> (Potencia_base_fija b f) * (LogNat (Cte b)) * (derivar f)
+    Potencia f n -> Cte n * (Potencia f (evaluar 727 (Cte n - 1))) * (derivar f)
 
-    Sin f        -> Prod (Cos f) (derivar f)
-    Cos f        -> Prod (negativo (Sin f)) (derivar f)
-    Tan f        -> Prod (Suma (Cte 1) (Prod (Tan f) (Tan f))) (derivar f)
+    Sin f        -> (Cos f) * (derivar f)
+    Cos f        -> (negate (Sin f)) * (derivar f)
+    Tan f        -> (1 + (Tan f)*(Tan f)) * (derivar f)
 
 
 n_derivar :: (Floating a, Eq a) => Integer -> MathExp a -> MathExp a
@@ -86,15 +94,16 @@ taylorAux :: (Floating a, Eq a) => a -> Integer -> Integer -> MathExp a -> MathE
 taylorAux a iterador n f poli
     | iterador > n = poli
     | otherwise = taylorAux a (iterador+1) n (simplificar . derivar $ f)
-                    (simplificar (Suma poli
-                                    (Prod (Frac (Cte (evaluar a f)) (Cte (fromIntegral(factorial iterador)))) (Potencia (Suma X (negativo (Cte a))) (fromIntegral iterador)))
+                    (simplificar (poli +
+                                    ((Cte (evaluar a f)) / (Cte (fromIntegral(factorial iterador)))) * (Potencia (X + (negate (Cte a))) (fromIntegral iterador))
                                  )
                     )
 
-pendiente_recta_tangente :: (Floating a, Eq a) => a -> MathExp a -> MathExp a
-pendiente_recta_tangente a f = Suma (Prod m (Suma X (negativo (Cte a)))) (Cte (evaluar a f))
-    where m = (Cte (evaluar a (derivar f)))
--- ejemplo: formato (pendiente_recta_tangente 2 (Suma (Cte 6) (Suma (Prod X X) (Prod (Cte 5) X))))
+
+recta_tangente :: (Floating a, Eq a) => a -> MathExp a -> MathExp a
+recta_tangente a f = m * (X - Cte a) + Cte (evaluar a f)
+    where m = Cte (evaluar a (derivar f))
+-- ejemplo: formato (recta_tangente 2 (6+X*X+5*X))
 
 
 
