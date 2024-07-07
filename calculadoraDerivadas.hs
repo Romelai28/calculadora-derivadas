@@ -1,22 +1,22 @@
 -- Pendiente, considerar la posibilidad de pedir que los casos marcados como problematicos puedan pedir que el fijo reduzca a una constante.
 
-data Funcion a = X
+data MathExp a = X
                 | Cte a
-                | Suma (Funcion a) (Funcion a)
-                | Prod (Funcion a) (Funcion a)
-                | Frac (Funcion a) (Funcion a)
-                | LogNat (Funcion a)
-                | LogBase a (Funcion a)             -- PROBLEMATICO
-                | Exp_e (Funcion a)  -- e^a
-                | Potencia_base_fija a (Funcion a)  -- PROBLEMATICO
-                | Potencia (Funcion a) a            -- PROBLEMATICO
-                | Sin (Funcion a)
-                | Cos (Funcion a)
-                | Tan (Funcion a)
+                | Suma (MathExp a) (MathExp a)
+                | Prod (MathExp a) (MathExp a)
+                | Frac (MathExp a) (MathExp a)
+                | LogNat (MathExp a)
+                | LogBase a (MathExp a)             -- PROBLEMATICO
+                | Exp_e (MathExp a)  -- e^a
+                | Potencia_base_fija a (MathExp a)  -- PROBLEMATICO
+                | Potencia (MathExp a) a            -- PROBLEMATICO
+                | Sin (MathExp a)
+                | Cos (MathExp a)
+                | Tan (MathExp a)
                 deriving (Eq,Show,Read)
 
 
-negativo :: (Floating a, Eq a) => Funcion a -> Funcion a
+negativo :: (Floating a, Eq a) => MathExp a -> MathExp a
 negativo = Prod (Cte (-1))
 
 
@@ -25,7 +25,7 @@ factorial 0 = 1
 factorial n = n*factorial (n-1)
 
 
-foldFunc :: b -> (a -> b) -> (b -> b -> b) -> (b -> b -> b) -> (b -> b -> b) -> (b -> b) -> (a -> b -> b) -> (b -> b)-> (a -> b-> b) -> (b -> a -> b) -> (b -> b) -> (b -> b) -> (b -> b) -> Funcion a -> b
+foldFunc :: b -> (a -> b) -> (b -> b -> b) -> (b -> b -> b) -> (b -> b -> b) -> (b -> b) -> (a -> b -> b) -> (b -> b)-> (a -> b-> b) -> (b -> a -> b) -> (b -> b) -> (b -> b) -> (b -> b) -> MathExp a -> b
 foldFunc cX cCte cSuma cProd cFrac cLogNat cLogBase cExp_e cPotencia_base_fija cPotencia cSin cCos cTan func = case func of
     X -> cX
     Cte k -> cCte k
@@ -43,16 +43,16 @@ foldFunc cX cCte cSuma cProd cFrac cLogNat cLogBase cExp_e cPotencia_base_fija c
   where rec = foldFunc cX cCte cSuma cProd cFrac cLogNat cLogBase cExp_e cPotencia_base_fija cPotencia cSin cCos cTan
 
 
-evaluar :: (Floating a, Eq a) => a -> Funcion a -> a
+evaluar :: (Floating a, Eq a) => a -> MathExp a -> a
 evaluar arg = foldFunc arg id (+) (*) (/) (log) (logBase) (exp) (**) (**) (sin) (cos) (tan)
 
 
-esConstante :: Funcion a -> Bool
+esConstante :: MathExp a -> Bool
 esConstante (Cte _) = True
 esConstante _       = False
 
 -- Se pued escribir como un fold pero no era claro.
-derivar :: (Floating a, Eq a) => Funcion a -> Funcion a
+derivar :: (Floating a, Eq a) => MathExp a -> MathExp a
 derivar func = case func of
     X            -> Cte 1
     Cte _        -> Cte 0
@@ -74,15 +74,15 @@ derivar func = case func of
     Tan f        -> Prod (Suma (Cte 1) (Prod (Tan f) (Tan f))) (derivar f)
 
 
-n_derivar :: (Floating a, Eq a) => Integer -> Funcion a -> Funcion a
+n_derivar :: (Floating a, Eq a) => Integer -> MathExp a -> MathExp a
 n_derivar 0 f = f
 n_derivar n f = n_derivar (n-1) (simplificar . derivar $ f)
 
 
-taylor :: (Floating a, Eq a) => a -> Integer -> Funcion a -> Funcion a
+taylor :: (Floating a, Eq a) => a -> Integer -> MathExp a -> MathExp a
 taylor a n f = taylorAux a 0 n f (Cte 0)
 
-taylorAux :: (Floating a, Eq a) => a -> Integer -> Integer -> Funcion a -> Funcion a -> Funcion a
+taylorAux :: (Floating a, Eq a) => a -> Integer -> Integer -> MathExp a -> MathExp a -> MathExp a
 taylorAux a iterador n f poli
     | iterador > n = poli
     | otherwise = taylorAux a (iterador+1) n (simplificar . derivar $ f)
@@ -91,10 +91,16 @@ taylorAux a iterador n f poli
                                  )
                     )
 
+pendiente_recta_tangente :: (Floating a, Eq a) => a -> MathExp a -> MathExp a
+pendiente_recta_tangente a f = Suma (Prod m (Suma X (negativo (Cte a)))) (Cte (evaluar a f))
+    where m = (Cte (evaluar a (derivar f)))
+-- ejemplo: formato (pendiente_recta_tangente 2 (Suma (Cte 6) (Suma (Prod X X) (Prod (Cte 5) X))))
+
+
 
 -- Un par de podas para simplificar las expresiones
 -- Las cte's son izquiedistas.
-simplificar :: (Floating a, Eq a) => Funcion a -> Funcion a
+simplificar :: (Floating a, Eq a) => MathExp a -> MathExp a
 simplificar func = case func of
     X -> X
     Cte k -> Cte k
@@ -215,7 +221,7 @@ simplificar func = case func of
 
 
 -- Devuelve una string de la función más amigable de leer. (Genera parentesis redundates)
-formatoNoSimp :: (Floating a, Eq a, Show a) => Funcion a -> String
+formatoNoSimp :: (Floating a, Eq a, Show a) => MathExp a -> String
 formatoNoSimp func = case func of
     X -> "X"
     Cte k -> show k
@@ -233,12 +239,12 @@ formatoNoSimp func = case func of
     Tan f -> "tan(" ++ formatoNoSimp f ++ ")"
 
 
-formato :: (Floating a, Eq a, Show a) => Funcion a -> String
+formato :: (Floating a, Eq a, Show a) => MathExp a -> String
 formato = formatoNoSimp . simplificar
 
 
 -- La solución para eliminar las \ fue usando putStrLn, me quedo una función auxiliar (toLatexNoSimp) y otra principal (toLatex)
-toLatexNoSimp :: (Floating a, Eq a, Show a) => Funcion a -> String
+toLatexNoSimp :: (Floating a, Eq a, Show a) => MathExp a -> String
 toLatexNoSimp func = case func of
     X -> "{x}"
     Cte k -> show k
